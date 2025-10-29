@@ -1,5 +1,36 @@
 name: 🎣 MallorKayak Weather Bot
+
 on:
   schedule:
     - cron: '0 10 * * *'
-...
+  
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Descargar código
+        uses: actions/checkout@v3
+      
+      - name: 🐍 Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: 📦 Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: 🚀 Ejecutar bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STORMGLASS_TOKEN: ${{ secrets.STORMGLASS_TOKEN }}
+        run: |
+          python bot.py
+      
+      - name: ✅ Completado
+        run: echo "Bot ejecutado exitosamente"
