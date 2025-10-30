@@ -51,24 +51,20 @@ def obtener_datos(lat, lon):
         return None
 
 def calcular_puntuacion(temp, viento):
-    """Calcula puntuación basada en temp y viento"""
+    """Calcula puntuación basada en temp y viento - VIENTO ES PRIORITARIO"""
     
-    # VIENTO ES PRIORITARIO
-    # Si viento es malo (>7), puntuación baja SIEMPRE
+    # VIENTO PRIORITARIO
     if viento > 7:
-        # Viento malo = máximo 3 puntos
-        viento_score = 1
-        rating_viento = "MALO ❌"
+        # Viento malo (>7 nudos) = máximo 1.5 puntos = ROJO
+        viento_score = 1.5
     elif viento > 5:
-        # Viento regular = máximo 5 puntos
-        viento_score = 2
-        rating_viento = "REGULAR ⚠️"
+        # Viento regular (5-7 nudos) = máximo 3 puntos = AMARILLO
+        viento_score = 3
     else:
-        # Viento bueno = máximo 9 puntos (permite buena puntuación)
+        # Viento bueno (0-5 nudos) = máximo 9 puntos = VERDE
         viento_score = 9
-        rating_viento = "BUENO ✅"
     
-    # TEMPERATURA (menos importante)
+    # TEMPERATURA (complementaria, poco importante)
     if 18 <= temp <= 24:
         temp_score = 1
     elif 15 <= temp <= 25:
@@ -76,7 +72,7 @@ def calcular_puntuacion(temp, viento):
     else:
         temp_score = 0.2
     
-    # Score final = viento_score * 10 / 10 (máximo 10)
+    # Score final (máximo 10)
     score = min(10, viento_score + temp_score)
     
     return score
@@ -145,7 +141,7 @@ def main():
         elif score >= 5:
             rating = "🟡 BUENO"
         else:
-            rating = "🔴 REGULAR"
+            rating = "🔴 ROJO"
         
         resultados.append({
             "nombre": nombre,
