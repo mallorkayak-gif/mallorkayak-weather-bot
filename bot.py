@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
-🎣 MallorKayak Weather Bot - VERSIÓN FUNCIONAL
-Bot meteorológico para Telegram usando Open-Meteo (100% gratis)
+🎣 MallorKayak Weather Bot - CON 3 DÍAS
 """
 
 import requests
-import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -38,8 +36,9 @@ def obtener_datos(lat, lon):
             "latitude": lat,
             "longitude": lon,
             "current": "temperature_2m,windspeed_10m",
-            "daily": "temperature_2m_max,temperature_2m_min,windspeed_10m_max,precipitation_sum",
-            "timezone": "Europe/Madrid"
+            "daily": "temperature_2m_max,windspeed_10m_max",
+            "timezone": "Europe/Madrid",
+            "forecast_days": 3
         }
         
         response = requests.get(url, params=params, timeout=10)
@@ -50,56 +49,57 @@ def obtener_datos(lat, lon):
         print(f"Error: {str(e)}")
         return None
 
-def calcular_puntuacion(temp, viento):
-    """Calcula puntuación basada en temp y viento - VIENTO ES PRIORITARIO"""
+def calcular_puntuacion(viento):
+    """Calcula puntuación - SOLO BASADO EN VIENTO"""
     
-    # VIENTO PRIORITARIO
     if viento > 7:
-        # Viento malo (>7 nudos) = máximo 1.5 puntos = ROJO
-        viento_score = 1.5
+        return 2  # ROJO - Viento malo
     elif viento > 5:
-        # Viento regular (5-7 nudos) = máximo 3 puntos = AMARILLO
-        viento_score = 3
+        return 5  # AMARILLO - Viento regular
     else:
-        # Viento bueno (0-5 nudos) = máximo 9 puntos = VERDE
-        viento_score = 9
-    
-    # TEMPERATURA (complementaria, poco importante)
-    if 18 <= temp <= 24:
-        temp_score = 1
-    elif 15 <= temp <= 25:
-        temp_score = 0.5
-    else:
-        temp_score = 0.2
-    
-    # Score final (máximo 10)
-    score = min(10, viento_score + temp_score)
-    
-    return score
+        return 9  # VERDE - Viento bueno
 
-def formatear_mensaje(resultados):
-    """Formatea mensaje para Telegram"""
-    hoy = datetime.now().strftime("%d/%m/%Y %H:%M")
+def get_rating(score):
+    """Asigna rating según puntuación"""
+    if score >= 9:
+        return "🟢 EXCELENTE"
+    elif score >= 7:
+        return "🟢 MUY BUENO"
+    elif score >= 5:
+        return "🟡 BUENO"
+    else:
+        return "🔴 REGULAR"
+
+def formatear_mensaje(resultados_por_dia):
+    """Formatea mensaje para Telegram con 3 días"""
     
-    msg = f"🎣 RECOMENDACIONES MALLORKAYAK\n\n"
-    msg += f"📅 {hoy}\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    msg = "🎣 RECOMENDACIONES MALLORKAYAK\n\n"
     
-    medallas = ["🥇", "🥈", "🥉"]
+    dias_nombres = ["HOY", "MAÑANA", "PASADO MAÑANA"]
     
-    for idx, zona in enumerate(resultados[:5]):
-        medalla = medallas[idx] if idx < 3 else "  "
-        msg += f"{medalla} {zona['nombre']}\n"
-        msg += f"⭐ {zona['score']}/10\n"
-        msg += f"🌡️ {zona['temp']:.1f}°C | 💨 {zona['viento']:.1f} nudos\n"
-        msg += f"{zona['rating']}\n\n"
+    for dia_idx, (fecha, zonas) in enumerate(resultados_por_dia.items()):
+        fecha_obj = datetime.strptime(fecha, "%Y-%m-%d")
+        fecha_str = fecha_obj.strftime("%d/%m/%Y")
+        
+        msg += f"📅 {dias_nombres[dia_idx]} - {fecha_str}\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        medallas = ["🥇", "🥈", "🥉"]
+        
+        for idx, zona in enumerate(zonas[:3]):
+            medalla = medallas[idx]
+            msg += f"{medalla} {zona['nombre']}\n"
+            msg += f"⭐ {zona['score']}/10 | {zona['rating']}\n"
+            msg += f"💨 {zona['viento']:.1f} nudos | 🌡️ {zona['temp']:.1f}°C\n\n"
+        
+        msg += "\n"
     
     return msg
 
 def enviar_telegram(mensaje):
     """Envía mensaje a Telegram"""
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("No Telegram configured - printing message:")
+        print("Test mode - printing message:")
         print(mensaje)
         return
     
@@ -112,51 +112,50 @@ def enviar_telegram(mensaje):
         requests.post(url, json=data, timeout=10)
         print("✅ Mensaje enviado a Telegram")
     except Exception as e:
-        print(f"❌ Error Telegram: {str(e)}")
+        print(f"❌ Error: {str(e)}")
 
 def main():
     print("🚀 Iniciando bot...")
     
-    resultados = []
+    resultados_por_dia = {}
     
     for nombre, coords in ZONAS.items():
         datos = obtener_datos(coords["lat"], coords["lon"])
         
-        if not datos or "current" not in datos:
+        if not datos or "daily" not in datos:
             continue
         
-        temp = datos["current"]["temperature_2m"]
-        viento = datos["current"]["windspeed_10m"]
+        daily = datos["daily"]
         
-        # Convertir km/h a nudos
-        viento_nudos = viento * 0.539957
-        
-        score = calcular_puntuacion(temp, viento_nudos)
-        
-        # Rating
-        if score >= 9:
-            rating = "🟢 EXCELENTE"
-        elif score >= 7:
-            rating = "🟢 MUY BUENO"
-        elif score >= 5:
-            rating = "🟡 BUENO"
-        else:
-            rating = "🔴 ROJO"
-        
-        resultados.append({
-            "nombre": nombre,
-            "temp": temp,
-            "viento": viento_nudos,
-            "score": score,
-            "rating": rating
-        })
+        # Procesar 3 días
+        for day in range(3):
+            fecha = daily["time"][day]
+            
+            if fecha not in resultados_por_dia:
+                resultados_por_dia[fecha] = []
+            
+            temp = daily["temperature_2m_max"][day]
+            viento_kmh = daily["windspeed_10m_max"][day]
+            viento_nudos = viento_kmh * 0.539957
+            
+            score = calcular_puntuacion(viento_nudos)
+            rating = get_rating(score)
+            
+            resultados_por_dia[fecha].append({
+                "nombre": nombre,
+                "temp": temp,
+                "viento": viento_nudos,
+                "score": score,
+                "rating": rating
+            })
     
-    # Ordenar por puntuación
-    resultados.sort(key=lambda x: x["score"], reverse=True)
+    # Ordenar cada día por puntuación
+    for fecha in resultados_por_dia:
+        resultados_por_dia[fecha].sort(key=lambda x: x["score"], reverse=True)
     
-    if resultados:
-        print(f"✅ {len(resultados)} zonas analizadas")
-        mensaje = formatear_mensaje(resultados)
+    if resultados_por_dia:
+        print(f"✅ Análisis completado para 3 días")
+        mensaje = formatear_mensaje(resultados_por_dia)
         print(mensaje)
         enviar_telegram(mensaje)
     else:
