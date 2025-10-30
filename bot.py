@@ -52,25 +52,34 @@ def obtener_datos(lat, lon):
 
 def calcular_puntuacion(temp, viento):
     """Calcula puntuación basada en temp y viento"""
-    score = 0
     
-    # VIENTO (0-5 bueno, 5-7 regular, >7 malo)
-    if viento <= 5:
-        score += 5  # BUENO
-    elif viento <= 7:
-        score += 3  # REGULAR
+    # VIENTO ES PRIORITARIO
+    # Si viento es malo (>7), puntuación baja SIEMPRE
+    if viento > 7:
+        # Viento malo = máximo 3 puntos
+        viento_score = 1
+        rating_viento = "MALO ❌"
+    elif viento > 5:
+        # Viento regular = máximo 5 puntos
+        viento_score = 2
+        rating_viento = "REGULAR ⚠️"
     else:
-        score += 1  # MALO
+        # Viento bueno = máximo 9 puntos (permite buena puntuación)
+        viento_score = 9
+        rating_viento = "BUENO ✅"
     
-    # TEMPERATURA (ideal: 18-24°C)
+    # TEMPERATURA (menos importante)
     if 18 <= temp <= 24:
-        score += 5  # IDEAL
+        temp_score = 1
     elif 15 <= temp <= 25:
-        score += 3  # BUENA
+        temp_score = 0.5
     else:
-        score += 1  # FRÍA
+        temp_score = 0.2
     
-    return min(10, score)
+    # Score final = viento_score * 10 / 10 (máximo 10)
+    score = min(10, viento_score + temp_score)
+    
+    return score
 
 def formatear_mensaje(resultados):
     """Formatea mensaje para Telegram"""
