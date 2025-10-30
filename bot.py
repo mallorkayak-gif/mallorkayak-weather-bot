@@ -52,21 +52,23 @@ def obtener_datos(lat, lon):
 
 def calcular_puntuacion(temp, viento):
     """Calcula puntuación basada en temp y viento"""
-    score = 5  # Base 5
+    score = 0
     
-    # Viento (ideal: 8-12 nudos)
-    if 8 <= viento <= 12:
-        score += 3
-    elif 4 <= viento <= 15:
-        score += 2
-    elif viento <= 20:
-        score += 1
+    # VIENTO (0-5 bueno, 5-7 regular, >7 malo)
+    if viento <= 5:
+        score += 5  # BUENO
+    elif viento <= 7:
+        score += 3  # REGULAR
+    else:
+        score += 1  # MALO
     
-    # Temperatura (ideal: 18-24°C)
+    # TEMPERATURA (ideal: 18-24°C)
     if 18 <= temp <= 24:
-        score += 2
+        score += 5  # IDEAL
     elif 15 <= temp <= 25:
-        score += 1
+        score += 3  # BUENA
+    else:
+        score += 1  # FRÍA
     
     return min(10, score)
 
