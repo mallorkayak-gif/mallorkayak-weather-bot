@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
-"""
-🎣 MallorKayak Weather Bot - CON 3 DÍAS
-"""
-
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -29,38 +25,30 @@ ZONAS = {
 }
 
 def obtener_datos(lat, lon):
-    """Obtiene datos de Open-Meteo"""
     try:
         url = "https://api.open-meteo.com/v1/forecast"
         params = {
             "latitude": lat,
             "longitude": lon,
             "current": "temperature_2m,windspeed_10m",
-            "daily": "temperature_2m_max,windspeed_10m_max",
-            "timezone": "Europe/Madrid",
-            "forecast_days": 3
+            "timezone": "Europe/Madrid"
         }
-        
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         return response.json()
-    
     except Exception as e:
         print(f"Error: {str(e)}")
         return None
 
 def calcular_puntuacion(viento):
-    """Calcula puntuación - SOLO BASADO EN VIENTO"""
-    
     if viento > 7:
-        return 2  # ROJO - Viento malo
+        return 2
     elif viento > 5:
-        return 5  # AMARILLO - Viento regular
+        return 5
     else:
-        return 9  # VERDE - Viento bueno
+        return 9
 
 def get_rating(score):
-    """Asigna rating según puntuación"""
     if score >= 9:
         return "🟢 EXCELENTE"
     elif score >= 7:
@@ -70,96 +58,58 @@ def get_rating(score):
     else:
         return "🔴 REGULAR"
 
-def formatear_mensaje(resultados_por_dia):
-    """Formatea mensaje para Telegram con 3 días"""
-    
-    msg = "🎣 RECOMENDACIONES MALLORKAYAK\n\n"
-    
-    dias_nombres = ["HOY", "MAÑANA", "PASADO MAÑANA"]
-    
-    for dia_idx, (fecha, zonas) in enumerate(resultados_por_dia.items()):
-        fecha_obj = datetime.strptime(fecha, "%Y-%m-%d")
-        fecha_str = fecha_obj.strftime("%d/%m/%Y")
-        
-        msg += f"📅 {dias_nombres[dia_idx]} - {fecha_str}\n"
-        msg += "━━━━━━━━━━━━━━━━━━━━━\n\n"
-        
-        medallas = ["🥇", "🥈", "🥉"]
-        
-        for idx, zona in enumerate(zonas[:3]):
-            medalla = medallas[idx]
-            msg += f"{medalla} {zona['nombre']}\n"
-            msg += f"⭐ {zona['score']}/10 | {zona['rating']}\n"
-            msg += f"💨 {zona['viento']:.1f} nudos | 🌡️ {zona['temp']:.1f}°C\n\n"
-        
-        msg += "\n"
-    
-    return msg
-
-def enviar_telegram(mensaje):
-    """Envía mensaje a Telegram"""
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Test mode - printing message:")
-        print(mensaje)
-        return
-    
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        data = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": mensaje
-        }
-        requests.post(url, json=data, timeout=10)
-        print("✅ Mensaje enviado a Telegram")
-    except Exception as e:
-        print(f"❌ Error: {str(e)}")
-
 def main():
     print("🚀 Iniciando bot...")
     
-    resultados_por_dia = {}
+    resultados = []
     
     for nombre, coords in ZONAS.items():
         datos = obtener_datos(coords["lat"], coords["lon"])
         
-        if not datos or "daily" not in datos:
+        if not datos or "current" not in datos:
             continue
         
-        daily = datos["daily"]
+        temp = datos["current"]["temperature_2m"]
+        viento_kmh = datos["current"]["windspeed_10m"]
+        viento_nudos = viento_kmh * 0.539957
         
-        # Procesar 3 días
-        for day in range(3):
-            fecha = daily["time"][day]
-            
-            if fecha not in resultados_por_dia:
-                resultados_por_dia[fecha] = []
-            
-            temp = daily["temperature_2m_max"][day]
-            viento_kmh = daily["windspeed_10m_max"][day]
-            viento_nudos = viento_kmh * 0.539957
-            
-            score = calcular_puntuacion(viento_nudos)
-            rating = get_rating(score)
-            
-            resultados_por_dia[fecha].append({
-                "nombre": nombre,
-                "temp": temp,
-                "viento": viento_nudos,
-                "score": score,
-                "rating": rating
-            })
+        score = calcular_puntuacion(viento_nudos)
+        rating = get_rating(score)
+        
+        resultados.append({
+            "nombre": nombre,
+            "temp": temp,
+            "viento": viento_nudos,
+            "score": score,
+            "rating": rating
+        })
     
-    # Ordenar cada día por puntuación
-    for fecha in resultados_por_dia:
-        resultados_por_dia[fecha].sort(key=lambda x: x["score"], reverse=True)
+    resultados.sort(key=lambda x: x["score"], reverse=True)
     
-    if resultados_por_dia:
-        print(f"✅ Análisis completado para 3 días")
-        mensaje = formatear_mensaje(resultados_por_dia)
-        print(mensaje)
-        enviar_telegram(mensaje)
-    else:
-        print("❌ No se obtuvieron datos")
+    if resultados:
+        msg = f"🎣 RECOMENDACIONES MALLORKAYAK\n\n"
+        msg += f"📅 {datetime.now().strftime('%d/%m/%Y %H:%M')}\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        medallas = ["🥇", "🥈", "🥉"]
+        
+        for idx, zona in enumerate(resultados[:5]):
+            medalla = medallas[idx] if idx < 3 else "  "
+            msg += f"{medalla} {zona['nombre']}\n"
+            msg += f"⭐ {zona['score']}/10\n"
+            msg += f"🌡️ {zona['temp']:.1f}°C | 💨 {zona['viento']:.1f} nudos\n"
+            msg += f"{zona['rating']}\n\n"
+        
+        print(msg)
+        
+        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+            try:
+                url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+                data = {"chat_id": TELEGRAM_CHAT_ID, "text": msg}
+                requests.post(url, json=data, timeout=10)
+                print("✅ Mensaje enviado")
+            except Exception as e:
+                print(f"❌ Error: {str(e)}")
 
 if __name__ == "__main__":
     main()
