@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import requests, os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -23,45 +23,64 @@ ZONAS = {
     "Sóller": (39.77, 2.73),
 }
 
-zonas_resultado = []
+# Para cada día (0=HOY, 1=MAÑANA, 2=PASADO MAÑANA)
+dias_resultado = {0: [], 1: [], 2: []}
 
 for nombre, (lat, lon) in ZONAS.items():
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,windspeed_10m&timezone=Europe/Madrid"
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max,windspeed_10m_max&timezone=Europe/Madrid&forecast_days=3"
         datos = requests.get(url, timeout=10).json()
-        temp = datos["current"]["temperature_2m"]
-        viento_kmh = datos["current"]["windspeed_10m"]
-        viento_nudos = viento_kmh * 0.539957
         
-        if viento_nudos > 7:
-            score = 2
-            rating = "🔴 REGULAR"
-        elif viento_nudos > 5:
-            score = 5
-            rating = "🟡 BUENO"
-        else:
-            score = 9
-            rating = "🟢 EXCELENTE"
-        
-        zonas_resultado.append({
-            "nombre": nombre,
-            "temp": temp,
-            "viento": viento_nudos,
-            "score": score,
-            "rating": rating
-        })
+        # Procesar 3 días
+        for dia_idx in range(3):
+            temp = datos["daily"]["temperature_2m_max"][dia_idx]
+            viento_kmh = datos["daily"]["windspeed_10m_max"][dia_idx]
+            viento_nudos = viento_kmh * 0.539957
+            
+            if viento_nudos > 7:
+                score = 2
+                rating = "🔴 REGULAR"
+            elif viento_nudos > 5:
+                score = 5
+                rating = "🟡 BUENO"
+            else:
+                score = 9
+                rating = "🟢 EXCELENTE"
+            
+            dias_resultado[dia_idx].append({
+                "nombre": nombre,
+                "temp": temp,
+                "viento": viento_nudos,
+                "score": score,
+                "rating": rating
+            })
     except:
         pass
 
-zonas_resultado.sort(key=lambda x: x["score"], reverse=True)
+# Ordenar cada día por puntuación
+for dia in dias_resultado:
+    dias_resultado[dia].sort(key=lambda x: x["score"], reverse=True)
 
-msg = f"🎣 RECOMENDACIONES MALLORKAYAK\n📅 {datetime.now().strftime('%d/%m/%Y %H:%M')}\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+# Generar mensaje
+msg = f"🎣 RECOMENDACIONES MALLORKAYAK\n"
+msg += f"📅 {datetime.now().strftime('%d/%m/%Y')}\n"
+msg += "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
 
+dias_nombres = ["🌅 HOY", "🌤️ MAÑANA", "⛅ PASADO MAÑANA"]
 medallas = ["🥇", "🥈", "🥉"]
 
-for idx, zona in enumerate(zonas_resultado[:5]):
-    medalla = medallas[idx] if idx < 3 else "  "
-    msg += f"{medalla} {zona['nombre']}\n⭐ {zona['score']}/10\n🌡️ {zona['temp']:.1f}°C | 💨 {zona['viento']:.1f} nudos\n{zona['rating']}\n\n"
+for dia_idx in range(3):
+    fecha = (datetime.now() + timedelta(days=dia_idx)).strftime("%d/%m")
+    msg += f"{dias_nombres[dia_idx]} - {fecha}\n"
+    msg += "━━━━━━━━━━━━━━━━━\n"
+    
+    for idx, zona in enumerate(dias_resultado[dia_idx][:3]):
+        medalla = medallas[idx]
+        msg += f"{medalla} {zona['nombre']}\n"
+        msg += f"⭐ {zona['score']}/10 | {zona['rating']}\n"
+        msg += f"💨 {zona['viento']:.1f} nudos | 🌡️ {zona['temp']:.1f}°C\n\n"
+    
+    msg += "\n"
 
 print(msg)
 
